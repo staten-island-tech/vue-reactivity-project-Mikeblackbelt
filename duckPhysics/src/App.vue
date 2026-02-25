@@ -1,47 +1,72 @@
-<script setup>
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
+  <div ref="container" class="scene"></div>
 
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
-
-  <main>
-    <TheWelcome />
-  </main>
+  <DaveCard @load-dave="handleLoadDave" />
 </template>
 
-<style scoped>
-header {
-  line-height: 1.5;
+<script setup>
+import { onMounted, ref } from 'vue'
+import * as THREE from 'three'
+import { loadDave } from './utils/loadDave'
+import DaveCard from './components/iLoveDave.vue'
+
+const container = ref(null)
+
+let scene, camera, renderer
+let dave = null
+
+onMounted(() => {
+  scene = new THREE.Scene()
+  scene.background = new THREE.Color(0x7eab3c);
+  scene.fog = new THREE.FogExp2(0x7eab3c, 0.1);
+
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  )
+
+  camera.position.set(0, 1, 5)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true })
+  renderer.setSize(window.innerWidth, window.innerHeight)
+
+  container.value.appendChild(renderer.domElement)
+
+  // Lighting
+  const light = new THREE.DirectionalLight(0xffffff, 2)
+  light.position.set(5, 5, 5)
+  scene.add(light)
+
+  const ambient = new THREE.AmbientLight(0xffffff, 1)
+  scene.add(ambient)
+
+  scene.add(new THREE.PolarGridHelper(100, 100))
+
+  animate()
+})
+
+async function handleLoadDave() {
+  if (dave) return // prevent duplicates
+
+  dave = await loadDave(scene)
 }
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
+function animate() {
+  requestAnimationFrame(animate)
+
+  if (dave) {
+    dave.rotation.y += 0.01
+  }
+
+  renderer.render(scene, camera)
 }
+</script>
 
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
+<style>
+.scene {
+  width: 100vw;
+  height: 100vh;
 }
 </style>
