@@ -1,7 +1,9 @@
 <template>
   <div class="card" @click="handleClick">
-    <h2>Load Dave</h2>
-    <p>Click to spawn Dave in the scene</p>
+    <h2>Dave</h2>
+    <p>Produces 1 Dave Point Per Second</p>
+    <p>Cost: 10 Dave Points
+    </p>
   </div>
 </template>
 
@@ -20,7 +22,7 @@ function handleClick() {
   left: 20px;
   width: 200px;
   padding: 16px;
-  background: white;
+  background: rgb(51, 99, 255);
   border-radius: 12px;
   cursor: pointer;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
