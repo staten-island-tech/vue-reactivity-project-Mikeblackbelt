@@ -1,10 +1,24 @@
 <template>
-  <div ref="container" class="scene"></div>
+  <div class="ui">
+    <div class="ui-stat">🪙 {{ davePoints.toFixed(0) }} pts</div>
+    <div class="ui-stat">👤 {{ daveCount }} Daves</div>
+    <div class="ui-stat">⚡ {{ davePointsPerSecond.toFixed(1) }} pts/sec</div>
+  </div>
 
-  <DaveCard @load-dave="handleLoadDave" />
+  <div ref="container" class="scene"></div>
+  <DaveCard :cost="daveCost" :canAfford="davePoints >= daveCost" @load-dave="handleLoadDave" />
+  <DaveCard
+  :cost="daveCost"
+  :canAfford="davePoints >= daveCost"
+  :bigCost="bigDaveCost"
+  :canAffordBig="davePoints >= bigDaveCost"
+  @load-dave="handleLoadDave"
+  @load-big-dave="handleLoadBigDave"
+/>
 </template>
+
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { loadDave } from "./utils/loadDave";
@@ -17,12 +31,31 @@ let dave = null;
 
 let world;
 let daveBody;
-let groundBody;
+let animationId;
+
+const davePoints = ref(1033);
+const daveCount = ref(0);
+const bigDaveCount = ref(0);
+const daveCost = ref(10);
+
+const basePointsPerDave = ref(1);
+const globalMultiplier = ref(1);
+const bigDaveMultipler = ref(1);
+
+const davePointsPerSecond = computed(() => {
+  return daveCount.value * basePointsPerDave.value * globalMultiplier.value + bigDaveCount.value * 10 * globalMultiplier.value * bigDaveMultipler.value
+});
+
+let productionInterval = null;
+
+const FIXED_TIMESTEP = 1 / 60;
+const GROUND_Y = -1;
+const GROUND_HALF_HEIGHT = 1;
+const GROUND_SURFACE_Y = GROUND_Y + GROUND_HALF_HEIGHT;
 
 onMounted(async () => {
   await RAPIER.init();
 
-  // ----- THREE SETUP -----
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x7eab3c);
 
@@ -36,84 +69,166 @@ onMounted(async () => {
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.value.appendChild(renderer.domElement);
 
-  const light = new THREE.DirectionalLight(0xffffff, 2);
-  light.position.set(5, 10, 5);
-  scene.add(light);
-  scene.add(new THREE.AmbientLight(0xffffff, 1));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+  dirLight.position.set(5, 10, 5);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(1024, 1024);
+  scene.add(dirLight);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-  // ----- RAPIER SETUP -----
-  world = new RAPIER.World({ x: 0, y: -9.81, z: 0 }); // Gravity is down
+  world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  world.integrationParameters.dt = FIXED_TIMESTEP;
+  world.integrationParameters.numSolverIterations = 8;
+  world.integrationParameters.numAdditionalFrictionIterations = 4;
 
-  // Ground
-  const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -1, 0);
-  groundBody = world.createRigidBody(groundDesc);
+  const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, GROUND_Y, 0);
+  const groundBody = world.createRigidBody(groundDesc);
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(10, GROUND_HALF_HEIGHT, 10)
+      .setFriction(0.8)
+      .setRestitution(0.1),
+    groundBody
+  );
 
-  const groundCollider = RAPIER.ColliderDesc.cuboid(10, 1, 10);
-  world.createCollider(groundCollider, groundBody);
-
-  // Visual ground
   const groundMesh = new THREE.Mesh(
     new THREE.BoxGeometry(20, 2, 20),
     new THREE.MeshStandardMaterial({ color: 0x444444 })
   );
-  groundMesh.position.set(0, -1, 0);
+  groundMesh.position.set(0, GROUND_Y, 0);
+  groundMesh.receiveShadow = true;
   scene.add(groundMesh);
+
+  spawnWall(world, -10, 0, 0, 10, 3, 0.5);
+  spawnWall(world,  10, 0, 0, 10, 3, 0.5);
+  spawnWall(world, 0, 0, -5, 0.5, 3, 10);
+  spawnWall(world, 0, 0,  5, 0.5, 3, 10);
+
+  window.addEventListener("resize", onResize);
+
+  productionInterval = setInterval(() => {
+    davePoints.value += davePointsPerSecond.value;
+  }, 1000);
 
   animate();
 });
 
+onUnmounted(() => {
+  cancelAnimationFrame(animationId);
+  window.removeEventListener("resize", onResize);
+  clearInterval(productionInterval);
+  renderer.dispose();
+});
+
+function spawnWall(world, x, y, z, hw, hh, hd) {
+  const body = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z)
+  );
+  world.createCollider(RAPIER.ColliderDesc.cuboid(hw, hh, hd), body);
+}
+
 async function handleLoadDave() {
+  if (davePoints.value < daveCost.value) return;
+
+  // ✅ Fix: mutate .value, don't reassign the ref
+  davePoints.value -= daveCost.value;
+  daveCost.value = Math.ceil(daveCost.value * 1.2);
 
   dave = await loadDave(scene);
-
-  // Create physics body for Dave
-  const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(0, 5, 0)
-    .setLinearDamping(0.5);
-
-  daveBody = world.createRigidBody(bodyDesc);
-
-  // Use capsule for character (better than box)
-  const colliderDesc = RAPIER.ColliderDesc.capsule(0.5, 0.5)
-    .setRestitution(0.2)
-    .setFriction(1.0);
-
-  world.createCollider(colliderDesc, daveBody);
-
-  // Apply a random force to Dave
-  applyRandomForceToDave();
-}
-
-// Apply a random force left or right
-function applyRandomForceToDave() {
-  if (!daveBody) return;
-
-  const randomDirection = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
-  const force = new RAPIER.Vector3(randomDirection * 5, 0, 0); // Apply force on X-axis (left or right)
-
-  // Apply force to Dave's body
-  daveBody.applyImpulse(force, true);
-}
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  if (world) {
-    world.step();
+  if (dave) {
+    dave.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
   }
 
-  // Sync physics -> Three
+  daveCount.value += 1;
+
+  const spawnY = GROUND_SURFACE_Y + 2.5;
+
+  const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(0, spawnY, 0)
+    .setLinearDamping(0.8)
+    .setAngularDamping(0.9);
+
+  daveBody = world.createRigidBody(bodyDesc);
+  world.createCollider(
+    RAPIER.ColliderDesc.capsule(0.2, 0.4)
+      .setFriction(0.8)
+      .setRestitution(0.1),
+    daveBody
+  );
+
+  applyRandomForceToDave();
+}
+const bigDaveCost = ref(100);
+
+async function handleLoadBigDave() {
+  if (davePoints.value < bigDaveCost.value) return;
+  davePoints.value -= bigDaveCost.value;
+  bigDaveCost.value = Math.ceil(bigDaveCost.value * 1.5);
+
+  dave = await loadDave(scene);
+  if (dave) {
+    dave.scale.set(2, 4, 2); // 👈 big!
+    dave.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  }
+
+  bigDaveCount.value += 1; // counts as 10 daves worth of production
+
+  const spawnY = GROUND_SURFACE_Y + 4;
+  const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(0, spawnY, 0)
+    .setLinearDamping(0.8)
+    .setAngularDamping(0.9);
+  daveBody = world.createRigidBody(bodyDesc);
+  world.createCollider(
+    RAPIER.ColliderDesc.capsule(1.2, 0.8).setFriction(0.8).setRestitution(0.1),
+    daveBody
+  );
+  applyRandomForceToDave();
+}
+function applyRandomForceToDave() {
+  if (!daveBody) return;
+  const dir = Math.random() < 0.5 ? -1 : 1;
+  const mass = daveBody.mass();
+  daveBody.applyImpulse(new RAPIER.Vector3(dir * mass * 2, 0, 0), true);
+}
+
+let accumulator = 0;
+let lastTime = performance.now();
+
+function animate() {
+  animationId = requestAnimationFrame(animate);
+
+  const now = performance.now();
+  const delta = Math.min((now - lastTime) / 1000, 0.1);
+  lastTime = now;
+
+  if (world) {
+    accumulator += delta;
+    while (accumulator >= FIXED_TIMESTEP) {
+      world.step();
+      accumulator -= FIXED_TIMESTEP;
+    }
+  }
+
   if (dave && daveBody) {
     const pos = daveBody.translation();
     const rot = daveBody.rotation();
-
-    dave.position.set(pos.x, pos.y, pos.z);
+    dave.position.set(pos.x, pos.y - 0.4, pos.z);
     dave.quaternion.set(rot.x, rot.y, rot.z, rot.w);
   }
 
   renderer.render(scene, camera);
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
 </script>
 
@@ -121,5 +236,27 @@ function animate() {
 .scene {
   width: 100vw;
   height: 100vh;
+}
+
+.ui {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+}
+
+.ui-stat {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-family: sans-serif;
+  letter-spacing: 0.3px;
 }
 </style>
