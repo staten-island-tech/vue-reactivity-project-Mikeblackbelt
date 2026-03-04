@@ -3,11 +3,13 @@
     <h2>Dave</h2>
     <p>Produces 1 Dave Point Per Second</p>
     <p>Cost: {{ cost }} Dave Points</p>
+    <p>Dave Amount: {{ amount }}</p>
   </div>
   <div class="card big" :class="{ disabled: !canAffordBig }" @click="handleClickBig">
     <h2>Big Dave</h2>
     <p>Produces 10 Dave Points Per Second</p>
     <p>Cost: {{ bigCost }} Dave Points</p>
+    <p>Big Dave Population: {{ amount2 }}</p>
   </div>
 </template>
 
@@ -15,8 +17,10 @@
 const props = defineProps({
   cost: { type: Number, required: true },
   canAfford: { type: Boolean, default: true },
-  bigCost: { type: Number, required: true },
-  canAffordBig: { type: Boolean, default: true }
+  bigCost: { type: Number, required: false },
+  canAffordBig: { type: Boolean, default: true },
+  amount: {type: Number, default: 0},
+  amount2: {type: Number, default: 0}
 })
 
 const emit = defineEmits(['load-dave', 'load-big-dave'])

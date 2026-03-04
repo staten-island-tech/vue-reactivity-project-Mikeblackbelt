@@ -1,34 +1,44 @@
 <template>
   <div class="ui">
     <div class="ui-stat">🪙 {{ davePoints.toFixed(0) }} pts</div>
-    <div class="ui-stat">👤 {{ daveCount }} Daves</div>
     <div class="ui-stat">⚡ {{ davePointsPerSecond.toFixed(1) }} pts/sec</div>
   </div>
 
   <div ref="container" class="scene"></div>
-  <DaveCard :cost="daveCost" :canAfford="davePoints >= daveCost" @load-dave="handleLoadDave" />
-  <DaveCard
-  :cost="daveCost"
-  :canAfford="davePoints >= daveCost"
-  :bigCost="bigDaveCost"
-  :canAffordBig="davePoints >= bigDaveCost"
-  @load-dave="handleLoadDave"
-  @load-big-dave="handleLoadBigDave"
+<!-- in template, next to DaveCard -->
+<UpgradeShop
+  :davePoints="davePoints"
+  @spend-points="davePoints -= $event"
+  @apply-upgrade="handleUpgrade"
 />
+  <DaveCard
+    :cost="daveCost"
+    :canAfford="davePoints >= daveCost"
+    :bigCost="bigDaveCost"
+    :canAffordBig="davePoints >= bigDaveCost"
+    @load-dave="handleLoadDave"
+    @load-big-dave="handleLoadBigDave"
+    :amount="daveCount"
+    :amount2="bigDaveCount"
+  />
 </template>
 
 <script setup>
+
 import { onMounted, onUnmounted, ref, computed } from "vue";
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { loadDave } from "./utils/loadDave";
 import DaveCard from "./components/iLoveDave.vue";
+// in script, add the import
+import UpgradeShop from "./components/shop.vue";
+
+// and the handler function
 
 const container = ref(null);
 
 let scene, camera, renderer;
 let dave = null;
-
 let world;
 let daveBody;
 let animationId;
@@ -37,13 +47,17 @@ const davePoints = ref(1033);
 const daveCount = ref(0);
 const bigDaveCount = ref(0);
 const daveCost = ref(10);
+const bigDaveCost = ref(100);
 
 const basePointsPerDave = ref(1);
 const globalMultiplier = ref(1);
-const bigDaveMultipler = ref(1);
+const bigDaveMultiplier = ref(1);
 
 const davePointsPerSecond = computed(() => {
-  return daveCount.value * basePointsPerDave.value * globalMultiplier.value + bigDaveCount.value * 10 * globalMultiplier.value * bigDaveMultipler.value
+  return (
+    daveCount.value * basePointsPerDave.value * globalMultiplier.value +
+    bigDaveCount.value * 10 * globalMultiplier.value * bigDaveMultiplier.value
+  );
 });
 
 let productionInterval = null;
@@ -59,12 +73,7 @@ onMounted(async () => {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x7eab3c);
 
-  camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-  );
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 2, 6);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -88,9 +97,7 @@ onMounted(async () => {
   const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, GROUND_Y, 0);
   const groundBody = world.createRigidBody(groundDesc);
   world.createCollider(
-    RAPIER.ColliderDesc.cuboid(10, GROUND_HALF_HEIGHT, 10)
-      .setFriction(0.8)
-      .setRestitution(0.1),
+    RAPIER.ColliderDesc.cuboid(10, GROUND_HALF_HEIGHT, 10).setFriction(0.8).setRestitution(0.1),
     groundBody
   );
 
@@ -104,8 +111,8 @@ onMounted(async () => {
 
   spawnWall(world, -10, 0, 0, 10, 3, 0.5);
   spawnWall(world,  10, 0, 0, 10, 3, 0.5);
-  spawnWall(world, 0, 0, -5, 0.5, 3, 10);
-  spawnWall(world, 0, 0,  5, 0.5, 3, 10);
+  spawnWall(world,   0, 0, -5, 0.5, 3, 10);
+  spawnWall(world,   0, 0,  5, 0.5, 3, 10);
 
   window.addEventListener("resize", onResize);
 
@@ -124,46 +131,33 @@ onUnmounted(() => {
 });
 
 function spawnWall(world, x, y, z, hw, hh, hd) {
-  const body = world.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z)
-  );
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z));
   world.createCollider(RAPIER.ColliderDesc.cuboid(hw, hh, hd), body);
 }
 
 async function handleLoadDave() {
   if (davePoints.value < daveCost.value) return;
-
-  // ✅ Fix: mutate .value, don't reassign the ref
   davePoints.value -= daveCost.value;
   daveCost.value = Math.ceil(daveCost.value * 1.2);
 
   dave = await loadDave(scene);
   if (dave) {
-    dave.traverse((o) => {
-      if (o.isMesh) o.castShadow = true;
-    });
+    dave.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   }
 
   daveCount.value += 1;
 
-  const spawnY = GROUND_SURFACE_Y + 2.5;
-
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(0, spawnY, 0)
+    .setTranslation(0, GROUND_SURFACE_Y + 2.5, 0)
     .setLinearDamping(0.8)
     .setAngularDamping(0.9);
-
   daveBody = world.createRigidBody(bodyDesc);
   world.createCollider(
-    RAPIER.ColliderDesc.capsule(0.2, 0.4)
-      .setFriction(0.8)
-      .setRestitution(0.1),
+    RAPIER.ColliderDesc.capsule(0.2, 0.4).setFriction(0.8).setRestitution(0.1),
     daveBody
   );
-
   applyRandomForceToDave();
 }
-const bigDaveCost = ref(100);
 
 async function handleLoadBigDave() {
   if (davePoints.value < bigDaveCost.value) return;
@@ -172,15 +166,14 @@ async function handleLoadBigDave() {
 
   dave = await loadDave(scene);
   if (dave) {
-    dave.scale.set(2, 4, 2); // 👈 big!
+    dave.scale.set(2, 4, 2);
     dave.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   }
 
-  bigDaveCount.value += 1; // counts as 10 daves worth of production
+  bigDaveCount.value += 1;
 
-  const spawnY = GROUND_SURFACE_Y + 4;
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(0, spawnY, 0)
+    .setTranslation(0, GROUND_SURFACE_Y + 4, 0)
     .setLinearDamping(0.8)
     .setAngularDamping(0.9);
   daveBody = world.createRigidBody(bodyDesc);
@@ -190,13 +183,24 @@ async function handleLoadBigDave() {
   );
   applyRandomForceToDave();
 }
+
 function applyRandomForceToDave() {
   if (!daveBody) return;
   const dir = Math.random() < 0.5 ? -1 : 1;
   const mass = daveBody.mass();
   daveBody.applyImpulse(new RAPIER.Vector3(dir * mass * 2, 0, 0), true);
 }
-
+function handleUpgrade(effect) {
+  if (effect.type === 'multiplier') {
+    basePointsPerDave.value *= effect.value
+  } else if (effect.type === 'bigMultiplier') {
+    bigDaveMultiplier.value *= effect.value
+  } else if (effect.type === 'baseBoost') {
+    basePointsPerDave.value += effect.value
+  } else if (effect.type === 'globalMultiplier') {
+    globalMultiplier.value *= effect.value
+  }
+}
 let accumulator = 0;
 let lastTime = performance.now();
 
