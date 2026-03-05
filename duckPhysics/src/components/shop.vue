@@ -73,6 +73,16 @@ const upgrades = ref([
     cost: 10000,
     bought: false,
     effect: { type: 'globalMultiplier', value: 10 }
+  },
+  {
+    id: 'kil-dio',
+    name: 'kil dio',
+    description:  'mek jotaro kil dio evil, because this is 2x point YIPEE',
+    icon: '🧛',
+    cost: 4000,
+    bought: false,
+    effect: {type: 'jotaroMultipier', value: 2
+    }
   }
 ])
 

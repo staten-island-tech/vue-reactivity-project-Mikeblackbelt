@@ -5,12 +5,12 @@
   </div>
 
   <div ref="container" class="scene"></div>
-<!-- in template, next to DaveCard -->
-<UpgradeShop
-  :davePoints="davePoints"
-  @spend-points="davePoints -= $event"
-  @apply-upgrade="handleUpgrade"
-/>
+
+  <UpgradeShop
+    :davePoints="davePoints"
+    @spend-points="davePoints -= $event"
+    @apply-upgrade="handleUpgrade"
+  />
   <DaveCard
     :cost="daveCost"
     :canAfford="davePoints >= daveCost"
@@ -21,19 +21,23 @@
     :amount="daveCount"
     :amount2="bigDaveCount"
   />
+  <JotaroCard
+    :cost="jotaroCost"
+    :canAfford="davePoints >= jotaroCost"
+    :amount="jotaroCount"
+    @load-jotaro="handleLoadJotaro"
+  />
 </template>
 
 <script setup>
-
 import { onMounted, onUnmounted, ref, computed } from "vue";
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { loadDave } from "./utils/loadDave";
+//import { loadJotaro } from "./utils/loadJotaro";
 import DaveCard from "./components/iLoveDave.vue";
-// in script, add the import
 import UpgradeShop from "./components/shop.vue";
-
-// and the handler function
+import JotaroCard from "./components/joestar.vue";
 
 const container = ref(null);
 
@@ -42,21 +46,26 @@ let dave = null;
 let world;
 let daveBody;
 let animationId;
+let jotaroModel = null;
+let jotaroBody = null;
 
 const davePoints = ref(1033);
 const daveCount = ref(0);
 const bigDaveCount = ref(0);
+const jotaroCount = ref(0);
 const daveCost = ref(10);
 const bigDaveCost = ref(100);
+const jotaroCost = ref(1000);
 
 const basePointsPerDave = ref(1);
 const globalMultiplier = ref(1);
 const bigDaveMultiplier = ref(1);
-
+const jotaroMultiplier = ref(1);
 const davePointsPerSecond = computed(() => {
   return (
     daveCount.value * basePointsPerDave.value * globalMultiplier.value +
-    bigDaveCount.value * 10 * globalMultiplier.value * bigDaveMultiplier.value
+    bigDaveCount.value * 10 * globalMultiplier.value * bigDaveMultiplier.value +
+    jotaroCount.value * 67 * globalMultiplier.value * jotaroMultiplier.value
   );
 });
 
@@ -184,23 +193,59 @@ async function handleLoadBigDave() {
   applyRandomForceToDave();
 }
 
+async function handleLoadJotaro() {
+  if (davePoints.value < jotaroCost.value) return;
+  davePoints.value -= jotaroCost.value;
+  jotaroCost.value = Math.ceil(jotaroCost.value * 1.8);
+  jotaroCount.value += 1;
+
+  jotaroModel = await loadDave(scene, '/jotaro_kujo.glb');
+  if (jotaroModel) {
+    jotaroModel.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    jotaroModel.scale.set(0.01,0.01,0.01)
+  }
+  
+
+  const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(
+      (Math.random() - 0.5) * 4,
+      GROUND_SURFACE_Y + 0.1,
+      (Math.random() - 0.5) * 2
+    )
+    .setLinearDamping(0.8)
+    .setAngularDamping(0.9);
+  jotaroBody = world.createRigidBody(bodyDesc);
+  world.createCollider(
+    RAPIER.ColliderDesc.capsule(0.02, 0.01).setFriction(0.8).setRestitution(0.2),
+    jotaroBody
+  );
+
+  const dir = Math.random() < 0.5 ? -1 : 1;
+  const mass = jotaroBody.mass();
+  jotaroBody.applyImpulse(new RAPIER.Vector3(dir * mass * 3, mass * 2, 0), true);
+}
+
 function applyRandomForceToDave() {
   if (!daveBody) return;
   const dir = Math.random() < 0.5 ? -1 : 1;
   const mass = daveBody.mass();
   daveBody.applyImpulse(new RAPIER.Vector3(dir * mass * 2, 0, 0), true);
 }
+
 function handleUpgrade(effect) {
   if (effect.type === 'multiplier') {
-    basePointsPerDave.value *= effect.value
+    basePointsPerDave.value *= effect.value;
   } else if (effect.type === 'bigMultiplier') {
-    bigDaveMultiplier.value *= effect.value
+    bigDaveMultiplier.value *= effect.value;
   } else if (effect.type === 'baseBoost') {
-    basePointsPerDave.value += effect.value
+    basePointsPerDave.value += effect.value;
   } else if (effect.type === 'globalMultiplier') {
-    globalMultiplier.value *= effect.value
+    globalMultiplier.value *= effect.value;
+  } else if (effect.type === 'jotaroMultipier') {
+    jotaroMultiplier *= effect.value;
   }
 }
+
 let accumulator = 0;
 let lastTime = performance.now();
 
@@ -224,6 +269,13 @@ function animate() {
     const rot = daveBody.rotation();
     dave.position.set(pos.x, pos.y - 0.4, pos.z);
     dave.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+  }
+
+  if (jotaroModel && jotaroBody) {
+    const pos = jotaroBody.translation();
+    const rot = jotaroBody.rotation();
+    jotaroModel.position.set(pos.x, pos.y, pos.z);
+    jotaroModel.quaternion.set(rot.x, rot.y, rot.z, rot.w);
   }
 
   renderer.render(scene, camera);

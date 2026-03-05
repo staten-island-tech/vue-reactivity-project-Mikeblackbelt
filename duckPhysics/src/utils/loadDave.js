@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-export function loadDave(scene) {
+export function loadDave(scene, path='/dave.glb') {
   const loader = new GLTFLoader();
 
   return new Promise((resolve, reject) => {
     loader.load(
-      '/dave.glb', // Ensure this path is correct
+      path, // Ensure this path is correct
       (gltf) => {
         const model = gltf.scene;
 
@@ -17,7 +17,6 @@ export function loadDave(scene) {
 
         // Optionally scale the model
         model.scale.set(2, 2, 2.3); // Adjust scale if needed
-
         // Add model to the scene
         scene.add(model);
 
