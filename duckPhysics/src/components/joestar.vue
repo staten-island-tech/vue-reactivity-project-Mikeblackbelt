@@ -2,7 +2,7 @@
   <div class="card jotaro" :class="{ disabled: !canAfford }" @click="handleClick">
     <h2>Jotaro Kujo</h2>
     <p class="flavour">「やれやれだぜ」</p>
-    <p>Produces <strong>67</strong> Dave Points/sec</p>
+    <p>Produces <strong>{{ displayVal }} </strong> Dave Points/sec</p>
     <p>Cost: {{ cost }} Dave Points</p>
     <p>Jotaro Count: {{ amount }}</p>
   </div>
@@ -13,6 +13,7 @@ const props = defineProps({
   cost:     { type: Number,  required: true },
   canAfford: { type: Boolean, default: true },
   amount:   { type: Number,  default: 0 },
+  displayVal: {type: Number, default: 67}
 })
 
 const emit = defineEmits(['load-jotaro'])

@@ -20,12 +20,15 @@
     @load-big-dave="handleLoadBigDave"
     :amount="daveCount"
     :amount2="bigDaveCount"
+    :display-val="basePointsPerDave*globalMultiplier"
+    :display-val2 ="10*bigDaveMultiplier*globalMultiplier"
   />
   <JotaroCard
     :cost="jotaroCost"
     :canAfford="davePoints >= jotaroCost"
     :amount="jotaroCount"
     @load-jotaro="handleLoadJotaro"
+    :display-val= "jotaroMultiplier*globalMultiplier"
   />
 </template>
 
@@ -49,7 +52,7 @@ let animationId;
 let jotaroModel = null;
 let jotaroBody = null;
 
-const davePoints = ref(1033);
+const davePoints = ref(1387382373937);
 const daveCount = ref(0);
 const bigDaveCount = ref(0);
 const jotaroCount = ref(0);
@@ -100,7 +103,7 @@ onMounted(async () => {
 
   world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.integrationParameters.dt = FIXED_TIMESTEP;
-  world.integrationParameters.numSolverIterations = 8;
+  world.integrationParameters.numSolverIterations = 32;
   world.integrationParameters.numAdditionalFrictionIterations = 4;
 
   const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, GROUND_Y, 0);
